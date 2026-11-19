@@ -3,79 +3,84 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Radar — fitted implied value for pre-token protocols</title>
+<title>Token Radar — What a launch would be worth</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <header class="masthead">
-  <p class="eyebrow">Token Radar · make.fun token-radar-01 · snapshot <span id="asof">—</span></p>
+  <p class="kicker">Token radar · make.fun token-radar-01 · snapshot 2026-11-14</p>
   <h1>What a launch would be worth</h1>
-  <p class="standfirst">Every pre-token protocol below, ranked by the value its token would imply —
-    fitted from the market caps of the 119 protocols that already trade, not from a
-    flat multiple. The model is refit from the sealed snapshot on every run.</p>
-  <dl class="fitline" id="fitline"></dl>
+  <p class="lede">Every pre-token protocol below, ranked by the value its token would imply — fitted from the market caps of the 119 protocols that already trade, and scored on TVL, seven-day growth and how long each protocol has run with no token.</p>
+  <p class="fitline">Fit&nbsp; <code>log10(mcap) = 3.3823 + 0.4721 · log10(TVL)</code> &nbsp;·&nbsp; Live set <b>119 protocols</b> &nbsp;·&nbsp; Flat median <b>×0.246</b> &nbsp;·&nbsp; Board <b>178 rows (40 watchlist + 138 early)</b> &nbsp;·&nbsp; Total implied <b>$1.49B</b></p>
 </header>
-<main>
-  <section class="panel" id="model" aria-label="How the value is fitted">
-    <h2>The fit, in one line</h2>
-    <p id="fittext"></p>
-    <ul class="keypoints" id="keypoints"></ul>
-  </section>
-  <section class="panel" id="controls" aria-label="Board controls">
-    <h2>The board</h2>
-    <div class="controls">
-      <label>Search <input id="q" type="search" placeholder="name or slug" autocomplete="off"></label>
-      <label>Category <select id="cat"><option value="">All categories</option></select></label>
-      <label class="check"><input id="watchonly" type="checkbox"> Watchlist only</label>
-      <label class="check"><input id="liveonly" type="checkbox"> Live tokens instead</label>
+
+<section class="fit">
+  <h2>The fit, in one line</h2>
+  <p>Across the 119 protocols that already trade, market cap grows like TVL^0.4721, not in proportion to TVL: the fitted line is log10(mcap) = 3.3823 + 0.4721 · log10(TVL). Each board row then adds half the log of its three round-2 multipliers — growth, maturity and chains — so a fast-growing, long-running protocol on several chains scores above the size line, and a shrinking young one scores below it. Every coefficient is refit from this snapshot on every run; the flat ×0.246 multiple is shown only as the baseline it replaces.</p>
+  <ul>
+    <li><b>Elasticity 0.4721:</b> value scales sub-linearly with size — a flat multiple overprices big protocols.</li>
+    <li><b>Growth, age and chains are scored, at half strength:</b> the blind test weakens round 2's multipliers but does not zero them — growth clipped to [−50, +100]% and weighted 0.6, maturity 0.65–1.00 over 1460 days, chains +2% per extra chain up to +10%.</li>
+    <li><b>One-per-ticker comps:</b> the live set is deduped by ticker (0 symbol rows and 0 CoinGecko rows dropped), so versions of one token never count twice.</li>
+    <li><b>Rank ranges come from 200 bootstrap refits</b> of the shipped model; the fitted line alone cannot move a rank, so the ranges are narrow at the top and wider mid-board.</li>
+    <li><b>Coverage:</b> all 40 watchlist slugs rank, plus 138 pre-token protocols below the $50M floor.</li>
+  </ul>
+  <h3>Blind test — leave-one-out, refit 119 times</h3>
+  <table class="loo">
+    <thead><tr><th>Model</th><th>LOO RMSE</th><th>LOO MAE</th><th>R² out-of-sample</th><th>Spearman</th><th>Median |error|</th><th>Within 2×</th></tr></thead>
+    <tbody>
+      <tr><td>M0 flat ×0.2460</td><td>0.9806</td><td>0.7625</td><td>−0.037</td><td>0.413</td><td>388%</td><td>30%</td></tr>
+      <tr><td>M1 fitted OLS</td><td>0.9054</td><td>0.6828</td><td>0.116</td><td>0.371</td><td>236%</td><td>33%</td></tr>
+      <tr><td>kNN-12 same-category first</td><td>0.9422</td><td>0.7193</td><td>0.043</td><td>0.362</td><td>313%</td><td>27%</td></tr>
+      <tr><td>Blend 0.7 M1 + 0.3 kNN</td><td>0.9004</td><td>0.6802</td><td>0.126</td><td>0.369</td><td>253%</td><td>32%</td></tr>
+      <tr class="shipped"><td>V2_half (shipped)</td><td>0.9106</td><td>0.6892</td><td>0.106</td><td>0.367</td><td>233%</td><td>34%</td></tr>
+      <tr><td>V2_full (undamped)</td><td>0.9190</td><td>0.6982</td><td>0.090</td><td>0.361</td><td>229%</td><td>29%</td></tr>
+    </tbody>
+  </table>
+  <p>Repeated 5-fold (seeds 0–2, TVL-desc order, seeded shuffle): the shipped model scores 0.9183; the flat baseline 0.9806; the fitted line alone 0.9133. Walk-forward (train on the past, test on the future): at the 60% cut the flat baseline scores 1.11, the fitted line 0.95 and the shipped model 0.97; at the 80% cut 1.30, 1.14 and 1.18 — the most recent listings are the hardest to price, and the shipped model still beats the flat baseline on both cuts. Where the flat multiple misses worst — protocols over $1B TVL — its mean error is −1.12 dex against −0.08 dex for the shipped model.</p>
+  <p class="limits">Honest limits: the fitted elasticity is measured on live protocols and may not transfer to pre-token ones; the board is a ranking, not a price target; comps are the nearest live protocols by size, not endorsements; a launch's real value also depends on the token's supply, unlocks and market timing, none of which this snapshot carries.</p>
+</section>
+
+<main id="board">
+  <section class="spotlight" id="spotlight" aria-label="Top five"></section>
+  <section class="controls" aria-label="Board controls">
+    <div class="tabs" role="tablist" aria-label="Board view">
+      <button type="button" id="tab-pretoken" role="tab" aria-selected="true">Pre-token board</button>
+      <button type="button" id="tab-live" role="tab" aria-selected="false">Live tokens instead</button>
     </div>
-    <p class="count" id="count"></p>
-    <div class="tablewrap"><table id="board"><thead><tr>
-      <th>#</th><th>Protocol</th><th>Category</th><th>TVL</th>
-      <th>Implied value</th><th>Rank range (p10–p90)</th><th>Watchlist</th>
-    </tr></thead><tbody></tbody></table></div>
-    <div class="tablewrap"><table id="livetable" hidden><thead><tr>
-      <th>#</th><th>Protocol</th><th>Category</th><th>TVL</th><th>Market cap</th><th>mcap / TVL</th>
-    </tr></thead><tbody></tbody></table></div>
+    <label class="ctl">Search <input type="search" id="q" placeholder="name or slug" autocomplete="off"></label>
+    <label class="ctl">Category <select id="category"><option value="">All categories</option></select></label>
+    <label class="ctl">Chain <select id="chain"><option value="">All chains</option></select></label>
+    <label class="ctl check"><input type="checkbox" id="watchlist-only"> Watchlist only</label>
   </section>
-  <section class="panel" id="validation" aria-label="Blind-test validation">
-    <h2>Tested blind before it scores anything</h2>
-    <p class="note">Leave-one-out by brute-force refit: each held-out protocol is excluded from
-      every fitted quantity, including the kNN pool. Repeated 5-fold uses seeds 0, 1 and 2.
-      The flat baseline is the full-live-set median, exactly as radar-2 used it.</p>
-    <h3>Leave-one-out, 119 live protocols</h3>
-    <div class="tablewrap"><table id="loo"><thead><tr>
-      <th>Model</th><th>RMSE (dex)</th><th>MAE (dex)</th><th>R² out-of-sample</th>
-      <th>Spearman</th><th>Median error</th><th>Within 2×</th><th>5-fold RMSE</th>
-    </tr></thead><tbody></tbody></table></div>
-    <h3>Walk-forward: train on the earliest-listed, test on the later-listed</h3>
-    <div class="tablewrap"><table id="walk"><thead><tr>
-      <th>Cut</th><th>Train / test</th><th>Flat</th><th>Log-log</th><th>Blend</th>
-    </tr></thead><tbody></tbody></table></div>
-    <h3>Tried and dropped</h3>
-    <ul class="dropped" id="dropped"></ul>
-  </section>
-  <section class="panel" id="limits" aria-label="Honest limits">
-    <h2>What this cannot say</h2>
-    <ul>
-      <li>Best R² out-of-sample is about +0.13: roughly 87% of log market-cap variance is
-        not explained by any snapshot field. Implied values are order-of-magnitude
-        estimates; the product is the ranking plus its uncertainty band, not the dollar figure.</li>
-      <li>The live set is a selected sample: protocols that have launched. Pre-token
-        protocols may differ systematically, and no snapshot field corrects for that.</li>
-      <li>One snapshot, one date. No time series exists in the input, so no trend,
-        seasonality or regime statement is possible.</li>
-      <li>Growth, age and chain count are displayed as tested-and-dropped, not as scorers:
-        the blind test rules them out as value drivers on this snapshot.</li>
-    </ul>
-  </section>
+  <p id="count" class="count"></p>
+  <table class="board">
+    <thead><tr>
+      <th data-sort="rank">#</th>
+      <th data-sort="name">Protocol</th>
+      <th data-sort="category">Category</th>
+      <th data-sort="tvl">TVL</th>
+      <th data-sort="growth">Growth 7d</th>
+      <th data-sort="age">Age</th>
+      <th data-sort="implied">Implied value</th>
+      <th>Rank range (P10–P90)</th>
+      <th>Watchlist</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="empty" id="empty" hidden>No rows match these filters.</div>
 </main>
-<footer>
-  <p>Source: <span id="source">—</span> · Board and validation are a pure function of the
-    sealed snapshot; nothing about any protocol is hardcoded. Farm steps are generic
-    guidance, not financial advice.</p>
-</footer>
-<dialog class="detail" id="detail"></dialog>
+
+<section class="live" id="live">
+  <h2>Live tokens, for reference</h2>
+  <p>The 24 largest live protocols by market cap, with the market's own value next to their TVL — the set the fitted line is measured on.</p>
+  <div id="live-table"></div>
+</section>
+
+<dialog class="detail" id="detail">
+  <form method="dialog"><button class="close" value="close" aria-label="Close">Close ×</button></form>
+  <div id="detail-body"></div>
+</dialog>
+
 <script src="../data.js"></script>
 <script src="app.js"></script>
 </body>

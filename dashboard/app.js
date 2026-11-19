@@ -1,184 +1,295 @@
-/* Token Radar dashboard: renders window.RADAR into the board, the validation
-   tables and the protocol detail dialog. No framework, no network: every
-   number on the page comes from the data.js this run wrote. */
-(function () {
-  var R = window.RADAR;
-  if (!R) return;
+// Token Radar — the dashboard.
+//
+// Renders the board from window.RADAR: a sortable pre-token table with
+// Growth and Age columns, a Live token view, a top-five spotlight, and a
+// detail dialog per protocol with its multipliers, its twelve nearest live
+// comps, its bootstrap rank range and its farm plan. State lives in the
+// URL hash so a link opens the same view: #p=<slug>, #watchlist=1, #q=,
+// #category=, #chain=, #tab=live.
 
-  function $(id) { return document.getElementById(id); }
-  function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
-  function compact(n) {
-    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
-    if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
-    return '$' + Math.round(n);
-  }
-  function num(n, digits) { return Number(n).toFixed(digits === undefined ? 4 : digits); }
-  function esc(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
+const DATA = window.RADAR;
 
-  $('asof').textContent = R.as_of;
-  $('source').textContent = R.source;
-  $('fitline').innerHTML =
-    '<dt>Fit</dt><dd>log10(mcap) = ' + R.fit_intercept + ' + ' + R.fit_slope + ' · log10(TVL)</dd>' +
-    '<dt>Live set</dt><dd>' + R.live_size + ' protocols</dd>' +
-    '<dt>Flat median</dt><dd>×' + R.flat_median_ratio + '</dd>' +
-    '<dt>Board</dt><dd>' + R.board_size + ' rows (' + R.watchlist_size + ' watchlist + ' + R.early_size + ' early)</dd>' +
-    '<dt>Total implied</dt><dd>' + money(R.total_implied_usd) + '</dd>';
-  $('fittext').textContent =
-    'Across the ' + R.live_size + ' protocols that already trade, market cap grows like TVL^' + R.fit_slope +
-    ', not in proportion to TVL: the fitted line is log10(mcap) = ' + R.fit_intercept + ' + ' + R.fit_slope +
-    ' · log10(TVL). Each board row blends that line (70%) with its 12 nearest live comps (30%), ' +
-    'same category first. Every coefficient is refit from this snapshot; the flat ×' + R.flat_median_ratio +
-    ' multiple is shown only as the baseline it replaces.';
-  $('keypoints').innerHTML =
-    '<li>Elasticity ' + R.fit_slope + ': value scales sub-linearly with size — a flat multiple overprices big protocols.</li>' +
-    '<li>One-per-ticker comps: the live set is deduped by ticker (' + R.live_dropped_symbol + ' symbol rows and ' +
-    R.live_dropped_gecko + ' CoinGecko rows dropped), so versioned rows of one token never count twice.</li>' +
-    '<li>Rank ranges come from ' + R.bootstrap_refits + ' bootstrap refits of both legs; the log-log leg alone ' +
-    'cannot move a rank, so the ranges are the kNN leg working.</li>' +
-    '<li>Coverage: all ' + R.watchlist_size + ' watchlist slugs rank, plus ' + R.early_size +
-    ' pre-token protocols below the $' + (R.floor_usd / 1e6).toFixed(0) + 'M floor.</li>';
+const $ = (id) => document.getElementById(id);
 
-  // ---- validation tables ----
-  var looBody = $('loo').querySelector('tbody');
-  looBody.innerHTML = R.validation.map(function (v, i) {
-    return '<tr' + (i === 3 ? ' class="best"' : '') + '><td>' + esc(v.model) + '</td>' +
-      '<td class="num">' + num(v.loo_rmse) + '</td><td class="num">' + num(v.loo_mae) + '</td>' +
-      '<td class="num">' + (v.loo_r2oos >= 0 ? '+' : '') + num(v.loo_r2oos, 3) + '</td>' +
-      '<td class="num">' + num(v.loo_spearman, 3) + '</td>' +
-      '<td class="num">' + Math.round(v.loo_med_pct) + '%</td>' +
-      '<td class="num">' + Math.round(v.loo_within_2x) + '%</td>' +
-      '<td class="num">' + num(v.fold_rmse_mean) + '</td></tr>';
-  }).join('');
-  var walkBody = $('walk').querySelector('tbody');
-  walkBody.innerHTML = R.walk_forward.map(function (w) {
-    return '<tr><td>' + Math.round(w.cut * 100) + '% / ' + (100 - Math.round(w.cut * 100)) + '%</td>' +
-      '<td class="num">' + w.train_n + ' / ' + w.test_n + '</td>' +
-      '<td class="num">' + num(w.flat_rmse) + '</td><td class="num">' + num(w.loglog_rmse) + '</td>' +
-      '<td class="num">' + num(w.blend_rmse) + '</td></tr>';
-  }).join('') +
-    '<tr><td colspan="5" class="note">Walk-forward is mixed at the 80% cut (n = 24, noisy): the ' +
-    'leave-one-out and 5-fold wins are real but time stability is unproven. The table shows both cuts, including the unfavourable one.</td></tr>';
-  $('dropped').innerHTML = R.dropped.map(function (d) {
-    return '<li><b>' + esc(d.term) + '</b> — LOO RMSE ' + num(d.loo_rmse) + ' dex. ' + esc(d.note) + '</li>';
-  }).join('');
+const tbody = document.querySelector('table.board tbody');
+const countEl = $('count');
+const emptyEl = $('empty');
+const dialog = $('detail');
+const detailBody = $('detail-body');
 
-  // ---- board ----
-  var rows = R.rows;
-  var cats = [];
-  rows.forEach(function (r) { if (r.category && cats.indexOf(r.category) === -1) cats.push(r.category); });
-  cats.sort();
-  $('cat').innerHTML = '<option value="">All categories</option>' +
-    cats.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('');
+const state = {
+  tab: 'pretoken',
+  q: '',
+  category: '',
+  chain: '',
+  watchlistOnly: false,
+  sortKey: 'rank',
+  sortDir: 1,
+  selected: null,
+};
 
-  function rowHtml(r) {
-    return '<tr data-slug="' + esc(r.slug) + '">' +
-      '<td class="num">' + r.rank + '</td>' +
-      '<td><b>' + esc(r.name) + '</b><span class="slug">' + esc(r.slug) + '</span></td>' +
-      '<td>' + esc(r.category || '—') + '</td>' +
-      '<td class="num">' + compact(r.tvl_usd) + '</td>' +
-      '<td class="num">' + money(r.implied_value_usd) + '</td>' +
-      '<td class="num">' + r.model.rank_p10 + '–' + r.model.rank_p90 + '</td>' +
-      '<td>' + (r.is_watchlist ? '<span class="star">★</span>' : '') + '</td></tr>';
-  }
-  function liveHtml(r, i) {
-    return '<tr><td class="num">' + (i + 1) + '</td>' +
-      '<td><b>' + esc(r.name) + '</b><span class="slug">' + esc(r.slug) + '</span></td>' +
-      '<td>' + esc(r.category || '—') + '</td>' +
-      '<td class="num">' + compact(r.tvl_usd) + '</td>' +
-      '<td class="num">' + money(r.mcap_usd || 0) + '</td>' +
-      '<td class="num">' + (r.mcap_usd ? (r.mcap_usd / r.tvl_usd).toFixed(3) : '—') + '</td></tr>';
-  }
+function compactMoney(n) {
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return `$${Math.round(n)}`;
+}
 
-  function applyFilters() {
-    var q = $('q').value.trim().toLowerCase();
-    var cat = $('cat').value;
-    var watch = $('watchonly').checked;
-    var liveMode = $('liveonly').checked;
-    $('board').hidden = liveMode;
-    $('livetable').hidden = !liveMode;
-    var shown = 0;
-    if (liveMode) {
-      var liveBody = $('livetable').querySelector('tbody');
-      var liveRows = R.live.filter(function (r) {
-        if (q && r.name.toLowerCase().indexOf(q) === -1 && r.slug.indexOf(q) === -1) return false;
-        if (cat && r.category !== cat) return false;
-        return true;
-      });
-      liveBody.innerHTML = liveRows.length
-        ? liveRows.map(liveHtml).join('')
-        : '<tr><td colspan="6" class="empty">No live protocol matches.</td></tr>';
-      shown = liveRows.length;
-    } else {
-      var boardBody = $('board').querySelector('tbody');
-      var list = rows.filter(function (r) {
-        if (q && r.name.toLowerCase().indexOf(q) === -1 && r.slug.indexOf(q) === -1) return false;
-        if (cat && r.category !== cat) return false;
-        if (watch && !r.is_watchlist) return false;
-        return true;
-      });
-      boardBody.innerHTML = list.length
-        ? list.map(rowHtml).join('')
-        : '<tr><td colspan="7" class="empty">No protocol matches.</td></tr>';
-      shown = list.length;
+function fullMoney(n) {
+  return `$${Math.round(n).toLocaleString('en-US')}`;
+}
+
+function growthText(g) {
+  if (g === null || g === undefined) return '—';
+  const sign = g > 0 ? '+' : g < 0 ? '−' : '';
+  return `${sign}${Math.abs(g).toFixed(1)}%`;
+}
+
+function ageText(days) {
+  if (days === null || days === undefined) return '—';
+  return `${days} days`;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values)].filter((v) => v !== null && v !== undefined && v !== '').sort();
+}
+
+function fillSelect(select, values, label) {
+  select.innerHTML = `<option value="">${label}</option>` + values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+}
+
+function visibleRows() {
+  const rows = state.tab === 'live' ? liveRows() : DATA.rows;
+  return rows.filter((row) => {
+    if (state.watchlistOnly && !row.watchlist) return false;
+    if (state.category && row.category !== state.category) return false;
+    if (state.chain && !(row.chains || []).includes(state.chain)) return false;
+    if (state.q) {
+      const q = state.q.toLowerCase();
+      if (!row.name.toLowerCase().includes(q) && !row.slug.toLowerCase().includes(q)) return false;
     }
-    $('count').textContent = shown + (liveMode ? ' live protocols shown (market values, not scored).' : ' of ' + rows.length + ' board rows shown.');
-  }
-
-  // ---- detail dialog ----
-  var dlg = $('detail');
-  function openDetail(slug) {
-    var r = null;
-    for (var i = 0; i < rows.length; i++) if (rows[i].slug === slug) { r = rows[i]; break; }
-    if (!r) return;
-    var compRows = r.comps.map(function (c) {
-      return '<tr><td><b>' + esc(c.slug) + '</b></td><td>' + esc(c.category || '—') + '</td>' +
-        '<td class="num">' + compact(c.tvl_usd) + '</td>' +
-        '<td class="num">' + num(c.log_ratio) + '</td></tr>';
-    }).join('');
-    dlg.innerHTML = '<div class="detail-inner"><button class="closebtn" id="closeDetail">Close ✕</button>' +
-      '<h2>#' + r.rank + ' ' + esc(r.name) + '</h2>' +
-      '<p class="sub">' + esc(r.slug) + ' · ' + esc(r.category || 'no category') + ' · ' +
-      esc(r.chains.join(', ') || 'no chain listed') + ' · TVL ' + compact(r.tvl_usd) +
-      (r.age_days === null ? ' · age unknown' : ' · ' + r.age_days + ' days listed') +
-      (r.is_watchlist ? ' · ★ watchlist' : '') + '</p>' +
-      '<div class="legs">' +
-      '<div class="leg"><b>Implied (blend)</b><span>' + money(r.implied_value_usd) + '</span></div>' +
-      '<div class="leg"><b>Log-log leg</b><span>' + money(r.model.ols_value_usd) + '</span></div>' +
-      '<div class="leg"><b>Comps leg</b><span>' + money(r.model.knn_value_usd) + '</span></div>' +
-      '<div class="leg"><b>Median comp ratio</b><span>10^' + num(r.model.knn_median_log_ratio) + '</span></div>' +
-      '<div class="leg"><b>Rank range</b><span>' + r.model.rank_p10 + ' – ' + r.model.rank_p90 + '</span></div>' +
-      '</div>' +
-      '<h3>Twelve nearest live comps (same category first)</h3>' +
-      '<div class="tablewrap"><table><thead><tr><th>Comp</th><th>Category</th><th>TVL</th><th>log ratio</th></tr></thead>' +
-      '<tbody>' + compRows + '</tbody></table></div>' +
-      '<h3>Farm plan</h3><ol class="farm">' +
-      r.farm_steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') +
-      '</ol></div>';
-    $('closeDetail').addEventListener('click', function () { dlg.close(); });
-    if (!dlg.open) dlg.showModal();
-  }
-  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
-  $('board').addEventListener('click', function (e) {
-    var tr = e.target.closest('tr[data-slug]');
-    if (tr) openDetail(tr.getAttribute('data-slug'));
+    return true;
   });
+}
 
-  // ---- wiring ----
-  ['q', 'cat', 'watchonly', 'liveonly'].forEach(function (id) {
-    $(id).addEventListener('input', applyFilters);
-    $(id).addEventListener('change', applyFilters);
-  });
-  function readHash() {
-    var h = window.location.hash || '';
-    var m = h.match(/p=([A-Za-z0-9._-]+)/);
-    var w = /(?:^|[&#])watchlist=1(?:[&#]|$)/.test(h);
-    if (w) $('watchonly').checked = true;
-    applyFilters();
-    if (m) openDetail(m[1]);
+function liveRows() {
+  return DATA.live.map((row, i) => ({
+    rank: i + 1,
+    slug: row.slug,
+    name: row.name,
+    category: row.category,
+    chains: row.chains,
+    tvl_usd: row.tvl_usd,
+    change_7d: row.change_7d,
+    age_days: null,
+    implied_value_usd: row.mcap_usd,
+    mcap_usd: row.mcap_usd,
+    rank_lo: null,
+    rank_hi: null,
+    watchlist: false,
+  }));
+}
+
+function sortValue(row, key) {
+  switch (key) {
+    case 'rank': return row.rank;
+    case 'name': return row.name.toLowerCase();
+    case 'category': return (row.category || '').toLowerCase();
+    case 'tvl': return row.tvl_usd;
+    case 'growth': return row.change_7d === null ? -Infinity : row.change_7d;
+    case 'age': return row.age_days === null ? -1 : row.age_days;
+    case 'implied': return row.implied_value_usd;
+    default: return row.rank;
   }
-  window.addEventListener('hashchange', readHash);
+}
+
+function renderBoard() {
+  const rows = visibleRows().slice();
+  const dir = state.sortDir;
+  rows.sort((a, b) => {
+    const av = sortValue(a, state.sortKey);
+    const bv = sortValue(b, state.sortKey);
+    if (typeof av === 'string') return av.localeCompare(bv) * dir;
+    return (av - bv) * dir;
+  });
+  const isLive = state.tab === 'live';
+  tbody.innerHTML = rows.map((row) => {
+    const range = row.rank_lo === null ? '—' : `${row.rank_lo}–${row.rank_hi}`;
+    const star = row.watchlist ? '<span class="star">★</span>' : '';
+    return `<tr data-slug="${esc(row.slug)}">
+      <td class="num">${row.rank}</td>
+      <td><div class="name">${esc(row.name)}</div><div class="slug">${esc(row.slug)}</div></td>
+      <td>${esc(row.category || '—')}</td>
+      <td class="num">${compactMoney(row.tvl_usd)}</td>
+      <td class="num">${growthText(row.change_7d)}</td>
+      <td class="num">${ageText(row.age_days)}</td>
+      <td class="num">${fullMoney(row.implied_value_usd)}</td>
+      <td class="num">${range}</td>
+      <td>${star}</td>
+    </tr>`;
+  }).join('');
+  const total = isLive ? DATA.live.length : DATA.rows.length;
+  countEl.textContent = isLive
+    ? `${rows.length} of ${total} live tokens shown.`
+    : `${rows.length} of ${total} board rows shown.`;
+  emptyEl.hidden = rows.length > 0;
+  document.querySelectorAll('table.board thead th[data-sort]').forEach((th) => {
+    const key = th.getAttribute('data-sort');
+    th.textContent = th.textContent.replace(/ [▲▼]$/, '');
+    if (key === state.sortKey) th.textContent += state.sortDir === 1 ? ' ▲' : ' ▼';
+    if (isLive && key === 'implied') th.textContent = th.textContent.replace('Implied value', 'Market cap');
+  });
+  const impliedTh = document.querySelector('table.board thead th[data-sort="implied"]');
+  if (impliedTh) impliedTh.textContent = (isLive ? 'Market cap' : 'Implied value') + (state.sortKey === 'implied' ? (state.sortDir === 1 ? ' ▲' : ' ▼') : '');
+  const rangeTh = document.querySelectorAll('table.board thead th')[7];
+  if (rangeTh) rangeTh.textContent = isLive ? 'mcap / TVL' : 'Rank range (P10–P90)';
+  tbody.querySelectorAll('tr').forEach((tr) => {
+    tr.addEventListener('click', () => openDetail(tr.getAttribute('data-slug')));
+  });
+  if (isLive) {
+    tbody.querySelectorAll('tr').forEach((tr, i) => {
+      const row = rows[i];
+      const ratio = row && row.mcap_usd ? (row.mcap_usd / row.tvl_usd).toFixed(3) : '—';
+      const cell = tr.children[7];
+      if (cell) cell.textContent = ratio;
+    });
+  }
+}
+
+function renderSpotlight() {
+  const top = DATA.rows.slice(0, 5);
+  $('spotlight').innerHTML = top.map((row) => `<div class="spot">
+    <div class="spot-rank">#${row.rank} · ${esc(row.category || '')}</div>
+    <div class="spot-name">${esc(row.name)}</div>
+    <div class="spot-value">${fullMoney(row.implied_value_usd)}</div>
+    <div class="spot-meta">TVL ${compactMoney(row.tvl_usd)} · ${growthText(row.change_7d)} 7d · ${ageText(row.age_days)}</div>
+  </div>`).join('');
+}
+
+function renderLiveTable() {
+  $('live-table').innerHTML = `<table>
+    <thead><tr><th>Protocol</th><th>TVL</th><th>Market cap</th><th>mcap / TVL</th></tr></thead>
+    <tbody>${DATA.live.map((row) => `<tr>
+      <td>${esc(row.name)} <span class="slug">${esc(row.slug)}</span></td>
+      <td>${compactMoney(row.tvl_usd)}</td>
+      <td>${fullMoney(row.mcap_usd)}</td>
+      <td>${(row.mcap_usd / row.tvl_usd).toFixed(3)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function stat(label, value) {
+  return `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+
+function openDetail(slug) {
+  const row = DATA.rows.find((r) => r.slug === slug);
+  if (!row) return;
+  state.selected = slug;
+  const chains = (row.chains || []).join(', ');
+  const sub = `${esc(row.slug)} · ${esc(row.category || '—')} · ${esc(chains)} · TVL ${compactMoney(row.tvl_usd)} · ${ageText(row.age_days)} listed${row.watchlist ? ' · ★ watchlist' : ''}`;
+  const compsRows = row.comps.map((c) => `<tr>
+    <td><b>${esc(c.slug)}</b></td>
+    <td>${esc(c.category || '—')}</td>
+    <td>${compactMoney(c.tvl_usd)}</td>
+    <td>${c.log_ratio.toFixed(4)}</td>
+  </tr>`).join('');
+  detailBody.innerHTML = `
+    <h2>#${row.rank} ${esc(row.name)}</h2>
+    <p class="sub">${sub}</p>
+    <div class="statgrid">
+      ${stat('Implied value', fullMoney(row.implied_value_usd))}
+      ${stat('TVL', compactMoney(row.tvl_usd))}
+      ${stat('Growth 7d', growthText(row.change_7d))}
+      ${stat('Age', ageText(row.age_days))}
+      ${stat('Growth multiplier', `×${row.growth_multiplier.toFixed(3)}`)}
+      ${stat('Maturity multiplier', `×${row.maturity_multiplier.toFixed(3)}`)}
+      ${stat('Chain multiplier', `×${row.chain_multiplier.toFixed(3)}`)}
+      ${stat('Median comp ratio', `10^${row.median_comp_ratio.toFixed(4)}`)}
+      ${stat('Rank range (P10–P90)', `${row.rank_lo} – ${row.rank_hi}`)}
+    </div>
+    <h3>Twelve nearest live comps</h3>
+    <p class="comps-note">${esc(row.comps_label)}</p>
+    <table>
+      <thead><tr><th>Comp</th><th>Category</th><th>TVL</th><th>Log ratio</th></tr></thead>
+      <tbody>${compsRows}</tbody>
+    </table>
+    <h3>Farm plan</h3>
+    <ol>${row.farm_steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
+  if (!dialog.open) dialog.showModal();
+  syncHash();
+}
+
+function closeDetail() {
+  if (dialog.open) dialog.close();
+  state.selected = null;
+  syncHash();
+}
+
+function setTab(tab) {
+  state.tab = tab;
+  $('tab-pretoken').setAttribute('aria-selected', String(tab === 'pretoken'));
+  $('tab-live').setAttribute('aria-selected', String(tab === 'live'));
+  renderBoard();
+  syncHash();
+}
+
+function syncHash() {
+  const params = new URLSearchParams();
+  if (state.tab === 'live') params.set('tab', 'live');
+  if (state.q) params.set('q', state.q);
+  if (state.category) params.set('category', state.category);
+  if (state.chain) params.set('chain', state.chain);
+  if (state.watchlistOnly) params.set('watchlist', '1');
+  if (state.selected) params.set('p', state.selected);
+  const hash = params.toString();
+  history.replaceState(null, '', hash ? `#${hash}` : '#');
+}
+
+function readHash() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  if (params.get('tab') === 'live') state.tab = 'live';
+  if (params.get('q')) state.q = params.get('q');
+  if (params.get('category')) state.category = params.get('category');
+  if (params.get('chain')) state.chain = params.get('chain');
+  if (params.get('watchlist') === '1') state.watchlistOnly = true;
+  if (params.get('p')) state.selected = params.get('p');
+}
+
+function init() {
+  fillSelect($('category'), uniqueSorted(DATA.rows.map((r) => r.category)), 'All categories');
+  fillSelect($('chain'), uniqueSorted(DATA.rows.flatMap((r) => r.chains || [])), 'All chains');
   readHash();
-})();
+  $('q').value = state.q;
+  $('category').value = state.category;
+  $('chain').value = state.chain;
+  $('watchlist-only').checked = state.watchlistOnly;
+  $('tab-pretoken').setAttribute('aria-selected', String(state.tab === 'pretoken'));
+  $('tab-live').setAttribute('aria-selected', String(state.tab === 'live'));
+  $('tab-pretoken').addEventListener('click', () => setTab('pretoken'));
+  $('tab-live').addEventListener('click', () => setTab('live'));
+  $('q').addEventListener('input', (e) => { state.q = e.target.value; renderBoard(); syncHash(); });
+  $('category').addEventListener('change', (e) => { state.category = e.target.value; renderBoard(); syncHash(); });
+  $('chain').addEventListener('change', (e) => { state.chain = e.target.value; renderBoard(); syncHash(); });
+  $('watchlist-only').addEventListener('change', (e) => { state.watchlistOnly = e.target.checked; renderBoard(); syncHash(); });
+  document.querySelectorAll('table.board thead th[data-sort]').forEach((th) => {
+    th.addEventListener('click', () => {
+      const key = th.getAttribute('data-sort');
+      if (state.sortKey === key) state.sortDir = -state.sortDir;
+      else { state.sortKey = key; state.sortDir = key === 'name' || key === 'category' ? 1 : -1; }
+      renderBoard();
+    });
+  });
+  dialog.addEventListener('close', () => { state.selected = null; syncHash(); });
+  dialog.addEventListener('click', (e) => { if (e.target === dialog) closeDetail(); });
+  renderSpotlight();
+  renderLiveTable();
+  renderBoard();
+  if (state.selected) openDetail(state.selected);
+}
+
+init();
