@@ -1,295 +1,205 @@
-// Token Radar — the dashboard.
-//
-// Renders the board from window.RADAR: a sortable pre-token table with
-// Growth and Age columns, a Live token view, a top-five spotlight, and a
-// detail dialog per protocol with its multipliers, its twelve nearest live
-// comps, its bootstrap rank range and its farm plan. State lives in the
-// URL hash so a link opens the same view: #p=<slug>, #watchlist=1, #q=,
-// #category=, #chain=, #tab=live.
+// Token Radar round 5 — dashboard rendering. No network: every number comes
+// from data.js, the file main.ts wrote beside this page. Sorting, filtering,
+// the detail view and the farm what-if controls all run here, in the browser.
+(function () {
+  const D = window.RADAR;
+  const rows = D.rows;
+  const watch = new Set(D.watchlist);
+  const $ = (id) => document.getElementById(id);
 
-const DATA = window.RADAR;
-
-const $ = (id) => document.getElementById(id);
-
-const tbody = document.querySelector('table.board tbody');
-const countEl = $('count');
-const emptyEl = $('empty');
-const dialog = $('detail');
-const detailBody = $('detail-body');
-
-const state = {
-  tab: 'pretoken',
-  q: '',
-  category: '',
-  chain: '',
-  watchlistOnly: false,
-  sortKey: 'rank',
-  sortDir: 1,
-  selected: null,
-};
-
-function compactMoney(n) {
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
-  return `$${Math.round(n)}`;
-}
-
-function fullMoney(n) {
-  return `$${Math.round(n).toLocaleString('en-US')}`;
-}
-
-function growthText(g) {
-  if (g === null || g === undefined) return '—';
-  const sign = g > 0 ? '+' : g < 0 ? '−' : '';
-  return `${sign}${Math.abs(g).toFixed(1)}%`;
-}
-
-function ageText(days) {
-  if (days === null || days === undefined) return '—';
-  return `${days} days`;
-}
-
-function esc(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function uniqueSorted(values) {
-  return [...new Set(values)].filter((v) => v !== null && v !== undefined && v !== '').sort();
-}
-
-function fillSelect(select, values, label) {
-  select.innerHTML = `<option value="">${label}</option>` + values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
-}
-
-function visibleRows() {
-  const rows = state.tab === 'live' ? liveRows() : DATA.rows;
-  return rows.filter((row) => {
-    if (state.watchlistOnly && !row.watchlist) return false;
-    if (state.category && row.category !== state.category) return false;
-    if (state.chain && !(row.chains || []).includes(state.chain)) return false;
-    if (state.q) {
-      const q = state.q.toLowerCase();
-      if (!row.name.toLowerCase().includes(q) && !row.slug.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
-}
-
-function liveRows() {
-  return DATA.live.map((row, i) => ({
-    rank: i + 1,
-    slug: row.slug,
-    name: row.name,
-    category: row.category,
-    chains: row.chains,
-    tvl_usd: row.tvl_usd,
-    change_7d: row.change_7d,
-    age_days: null,
-    implied_value_usd: row.mcap_usd,
-    mcap_usd: row.mcap_usd,
-    rank_lo: null,
-    rank_hi: null,
-    watchlist: false,
-  }));
-}
-
-function sortValue(row, key) {
-  switch (key) {
-    case 'rank': return row.rank;
-    case 'name': return row.name.toLowerCase();
-    case 'category': return (row.category || '').toLowerCase();
-    case 'tvl': return row.tvl_usd;
-    case 'growth': return row.change_7d === null ? -Infinity : row.change_7d;
-    case 'age': return row.age_days === null ? -1 : row.age_days;
-    case 'implied': return row.implied_value_usd;
-    default: return row.rank;
+  function money(n) {
+    if (n >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
+    if (n >= 1e6) return "$" + (n / 1e6).toFixed(1) + "M";
+    if (n >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
+    if (n < 100) return "$" + n.toFixed(2);
+    return "$" + Math.round(n);
   }
-}
+  function signed(n, dec) {
+    return (n >= 0 ? "+" : "−") + "$" + Math.abs(n).toFixed(dec === undefined ? 2 : dec);
+  }
+  function pct(x, dec) {
+    return (x * 100).toFixed(dec === undefined ? 1 : dec) + "%";
+  }
+  function ageFmt(days) {
+    if (days === null || days === undefined) return "—";
+    if (days < 365) return days + "d";
+    return (days / 365).toFixed(1) + "y";
+  }
+  function growthFmt(g) {
+    if (g === null || g === undefined) return "—";
+    return (g >= 0 ? "+" : "") + g.toFixed(1) + "%";
+  }
 
-function renderBoard() {
-  const rows = visibleRows().slice();
-  const dir = state.sortDir;
-  rows.sort((a, b) => {
-    const av = sortValue(a, state.sortKey);
-    const bv = sortValue(b, state.sortKey);
-    if (typeof av === 'string') return av.localeCompare(bv) * dir;
-    return (av - bv) * dir;
+  // ---- KPI strip (from the shipped board, $1,000 / 60 days) ----
+  $("kpi-rows").textContent = D.totals.rows;
+  $("kpi-total").textContent = money(D.totals.totalImplied);
+  const shipped = D.backtest.find((b) => b.label.indexOf("shipped model") >= 0);
+  $("kpi-miss").textContent = "×" + shipped.loo.medMissX.toFixed(2);
+  $("kpi-within3").textContent = pct(shipped.loo.within3x, 0);
+  $("kpi-farm").textContent = D.totals.farm + " FARM";
+  $("kpi-besthour").textContent = signed(D.totals.bestPerHour, 2) + "/h";
+
+  // ---- Launch-odds category table ----
+  const lc = $("launch-cats");
+  lc.innerHTML = D.launchOdds.byCategory
+    .map((c) => "<tr><td>" + c.category + "</td><td>" + c.n + "</td><td>" + pct(c.share, 0) + "</td></tr>")
+    .join("");
+
+  // ---- Category dropdown ----
+  const catSel = $("cat");
+  [...new Set(rows.map((r) => r.category))].sort().forEach((c) => {
+    const o = document.createElement("option");
+    o.value = c;
+    o.textContent = c;
+    catSel.appendChild(o);
   });
-  const isLive = state.tab === 'live';
-  tbody.innerHTML = rows.map((row) => {
-    const range = row.rank_lo === null ? '—' : `${row.rank_lo}–${row.rank_hi}`;
-    const star = row.watchlist ? '<span class="star">★</span>' : '';
-    return `<tr data-slug="${esc(row.slug)}">
-      <td class="num">${row.rank}</td>
-      <td><div class="name">${esc(row.name)}</div><div class="slug">${esc(row.slug)}</div></td>
-      <td>${esc(row.category || '—')}</td>
-      <td class="num">${compactMoney(row.tvl_usd)}</td>
-      <td class="num">${growthText(row.change_7d)}</td>
-      <td class="num">${ageText(row.age_days)}</td>
-      <td class="num">${fullMoney(row.implied_value_usd)}</td>
-      <td class="num">${range}</td>
-      <td>${star}</td>
-    </tr>`;
-  }).join('');
-  const total = isLive ? DATA.live.length : DATA.rows.length;
-  countEl.textContent = isLive
-    ? `${rows.length} of ${total} live tokens shown.`
-    : `${rows.length} of ${total} board rows shown.`;
-  emptyEl.hidden = rows.length > 0;
-  document.querySelectorAll('table.board thead th[data-sort]').forEach((th) => {
-    const key = th.getAttribute('data-sort');
-    th.textContent = th.textContent.replace(/ [▲▼]$/, '');
-    if (key === state.sortKey) th.textContent += state.sortDir === 1 ? ' ▲' : ' ▼';
-    if (isLive && key === 'implied') th.textContent = th.textContent.replace('Implied value', 'Market cap');
+
+  // ---- Farm math under the what-if controls ----
+  function wiState() {
+    return {
+      deposit: Number($("wi-deposit").value),
+      share: Number($("wi-share").value),
+      tbill: Number($("wi-tbill").value),
+    };
+  }
+  function wiFarm(r, wi) {
+    const dd = r.dollarDays === undefined ? 60 / (60 + (r.ageDays === null ? 365 : r.ageDays) / 2) : r.dollarDays;
+    const slice = wi.share * r.implied_value_usd * (wi.deposit / r.tvl_usd) * dd;
+    const net = slice - 5 - (wi.deposit * wi.tbill * 60) / 365;
+    const verdict = net > 0 ? "FARM" : net > -10 ? "THIN" : "SKIP";
+    return { slice, net, verdict };
+  }
+  // dollarDays is not in the gate rows; keep it on the full rows for the page.
+  rows.forEach((r) => {
+    const age = r.ageDays === null ? 365 : r.ageDays;
+    r.dollarDays = 60 / (60 + age / 2);
   });
-  const impliedTh = document.querySelector('table.board thead th[data-sort="implied"]');
-  if (impliedTh) impliedTh.textContent = (isLive ? 'Market cap' : 'Implied value') + (state.sortKey === 'implied' ? (state.sortDir === 1 ? ' ▲' : ' ▼') : '');
-  const rangeTh = document.querySelectorAll('table.board thead th')[7];
-  if (rangeTh) rangeTh.textContent = isLive ? 'mcap / TVL' : 'Rank range (P10–P90)';
-  tbody.querySelectorAll('tr').forEach((tr) => {
-    tr.addEventListener('click', () => openDetail(tr.getAttribute('data-slug')));
-  });
-  if (isLive) {
-    tbody.querySelectorAll('tr').forEach((tr, i) => {
-      const row = rows[i];
-      const ratio = row && row.mcap_usd ? (row.mcap_usd / row.tvl_usd).toFixed(3) : '—';
-      const cell = tr.children[7];
-      if (cell) cell.textContent = ratio;
+
+  function currentRows() {
+    const wi = wiState();
+    const sort = $("sort").value;
+    const cat = catSel.value;
+    const verdict = $("verdict").value;
+    const wlOnly = $("watchlist").checked;
+    const q = $("q").value.trim().toLowerCase();
+    let list = rows.map((r) => ({ r, f: wiFarm(r, wi) }));
+    if (cat) list = list.filter((e) => e.r.category === cat);
+    if (verdict) list = list.filter((e) => e.f.verdict === verdict);
+    if (wlOnly) list = list.filter((e) => watch.has(e.r.slug));
+    if (q) list = list.filter((e) => (e.r.name + " " + e.r.slug).toLowerCase().indexOf(q) >= 0);
+    const key = {
+      rank: (a, b) => a.r.rank - b.r.rank,
+      tvl: (a, b) => b.r.tvl_usd - a.r.tvl_usd,
+      growth: (a, b) => (b.r.change_7d === null ? -999 : b.r.change_7d) - (a.r.change_7d === null ? -999 : a.r.change_7d),
+      age: (a, b) => (b.r.ageDays === null ? -1 : b.r.ageDays) - (a.r.ageDays === null ? -1 : a.r.ageDays),
+      implied: (a, b) => b.r.implied_value_usd - a.r.implied_value_usd,
+      net: (a, b) => b.f.net - a.f.net,
+    }[sort];
+    list.sort(key);
+    return { list, wi };
+  }
+
+  function render() {
+    const { list, wi } = currentRows();
+    const tb = $("rows");
+    tb.innerHTML = list
+      .map((e) => {
+        const r = e.r;
+        return (
+          "<tr data-slug=\"" + r.slug + "\">" +
+          "<td class=\"num\">" + r.rank + "</td>" +
+          "<td class=\"name\">" + r.name + "<small>" + r.slug + "</small></td>" +
+          "<td class=\"num\">" + money(r.tvl_usd) + "</td>" +
+          "<td class=\"num\">" + growthFmt(r.change_7d) + "</td>" +
+          "<td class=\"num\">" + ageFmt(r.ageDays) + "</td>" +
+          "<td>" + r.category + "</td>" +
+          "<td class=\"num\">" + money(r.implied_value_usd) + "</td>" +
+          "<td class=\"num\">" + r.rankP10 + "–" + r.rankP90 + "</td>" +
+          "<td class=\"num\">" + pct(r.launchShare, 0) + "</td>" +
+          "<td><span class=\"verdict " + e.f.verdict + "\">" + e.f.verdict + "</span></td>" +
+          "<td class=\"num\">" + signed(e.f.net) + "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+    $("count").textContent =
+      list.length + " of " + rows.length + " rows · deposit $" + wi.deposit.toLocaleString("en-US") +
+      " · drop share " + pct(wi.share, 1) + " · T-bill " + pct(wi.tbill, 0) + " · 60 days";
+    const farms = list.filter((e) => e.f.verdict === "FARM").length;
+    $("wi-note").textContent = farms + " FARM under these settings";
+    tb.querySelectorAll("tr").forEach((tr) => {
+      tr.addEventListener("click", () => openDetail(tr.getAttribute("data-slug")));
     });
   }
-}
 
-function renderSpotlight() {
-  const top = DATA.rows.slice(0, 5);
-  $('spotlight').innerHTML = top.map((row) => `<div class="spot">
-    <div class="spot-rank">#${row.rank} · ${esc(row.category || '')}</div>
-    <div class="spot-name">${esc(row.name)}</div>
-    <div class="spot-value">${fullMoney(row.implied_value_usd)}</div>
-    <div class="spot-meta">TVL ${compactMoney(row.tvl_usd)} · ${growthText(row.change_7d)} 7d · ${ageText(row.age_days)}</div>
-  </div>`).join('');
-}
+  // ---- Detail view ----
+  const dlg = $("detail");
+  function openDetail(slug) {
+    const r = rows.find((x) => x.slug === slug);
+    if (!r) return;
+    const wi = wiState();
+    const f = wiFarm(r, wi);
+    const w = r.waterfall;
+    const farmRows = [
+      ["Verdict", "<span class=\"verdict " + f.verdict + "\">" + f.verdict + "</span>"],
+      ["Drop slice", money(f.slice)],
+      ["Net at $" + wi.deposit.toLocaleString("en-US") + " / 60 days", signed(f.net)],
+      ["Break-even deposit", r.breakEvenDeposit === null ? "none — even $1,000 loses" : "$" + Math.round(r.breakEvenDeposit).toLocaleString("en-US")],
+      ["Break-even drop share", r.breakEvenShare === null ? "—" : pct(r.breakEvenShare, 1)],
+      ["Work", r.hours + " hours (" + r.farm_steps.length + " steps)"],
+    ];
+    const compRows = r.comps
+      .map(
+        (c) =>
+          "<tr><td>" + c.name + "</td><td class=\"num\">" + money(c.tvl) + "</td><td class=\"num\">" + money(c.mcap) + "</td><td class=\"num\">" + c.ratio.toFixed(2) + "×</td></tr>",
+      )
+      .join("");
+    const stepList = r.farm_steps.map((s) => "<li>" + s + "</li>").join("");
+    $("detail-body").innerHTML =
+      "<h3>" + r.name + "</h3>" +
+      "<p class=\"sub\">#" + r.rank + " · " + r.slug + " · " + r.category + " · " + r.chains.join(", ") + " · TVL " + money(r.tvl_usd) +
+      " · 7d " + growthFmt(r.change_7d) + " · age " + ageFmt(r.ageDays) + "</p>" +
+      "<p class=\"big\">" + money(r.implied_value_usd) + "</p>" +
+      "<p>Rank range p10–p90: " + r.rankP10 + "–" + r.rankP90 + " (200 bootstrap refits). " +
+      "Launch share " + pct(r.launchShare, 0) + " — " + r.launchBasis + ", n=" + r.launchN + ". " +
+      "Cross-section share, not a forward forecast.</p>" +
+      "<h4>How the value is built</h4>" +
+      "<table class=\"nums\"><thead><tr><th>Step</th><th>Value</th></tr></thead><tbody>" +
+      "<tr><td>Size curve alone</td><td>" + money(w.sizeValue) + "</td></tr>" +
+      "<tr><td>After sector (" + r.category + ", offset " + (r.sectorOffset >= 0 ? "+" : "") + r.sectorOffset.toFixed(2) + " dex, n=" + r.sectorN + ")</td><td>" + money(w.sectorValue) + "</td></tr>" +
+      "<tr><td>After momentum (growth ×" + r.growthMult.toFixed(2) + ")</td><td>" + money(w.momValue) + "</td></tr>" +
+      "<tr><td>After age &amp; chains (×" + (r.maturityMult * r.chainMult).toFixed(2) + ")</td><td>" + money(w.finalValue) + "</td></tr>" +
+      "</tbody></table>" +
+      "<h4>Farm</h4><div class=\"farmbox\">" +
+      farmRows.map((x) => "<p><strong>" + x[0] + ":</strong> " + x[1] + "</p>").join("") +
+      "</div>" +
+      "<ol class=\"steps\">" + stepList + "</ol>" +
+      "<h4>Nearest comps — same category first, then the nearest size</h4>" +
+      "<table class=\"nums\"><thead><tr><th>Protocol</th><th>TVL</th><th>Market cap</th><th>Ratio</th></tr></thead><tbody>" +
+      compRows +
+      "</tbody></table>" +
+      "<p>Nearest-comps value: " + money(r.knnValue) + " (median ratio " + r.knnMedianRatio.toFixed(2) +
+      "×). This row's value sits within its comps' ratio range.</p>" +
+      "<p class=\"caveat\">Values are the entry's own claims. The snapshot is one date; " +
+      "a protocol that records no token may still have one its DefiLlama record does not carry.</p>";
+    if (!dlg.open) dlg.showModal();
+    history.replaceState(null, "", "#p=" + slug);
+  }
 
-function renderLiveTable() {
-  $('live-table').innerHTML = `<table>
-    <thead><tr><th>Protocol</th><th>TVL</th><th>Market cap</th><th>mcap / TVL</th></tr></thead>
-    <tbody>${DATA.live.map((row) => `<tr>
-      <td>${esc(row.name)} <span class="slug">${esc(row.slug)}</span></td>
-      <td>${compactMoney(row.tvl_usd)}</td>
-      <td>${fullMoney(row.mcap_usd)}</td>
-      <td>${(row.mcap_usd / row.tvl_usd).toFixed(3)}</td>
-    </tr>`).join('')}</tbody>
-  </table>`;
-}
-
-function stat(label, value) {
-  return `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`;
-}
-
-function openDetail(slug) {
-  const row = DATA.rows.find((r) => r.slug === slug);
-  if (!row) return;
-  state.selected = slug;
-  const chains = (row.chains || []).join(', ');
-  const sub = `${esc(row.slug)} · ${esc(row.category || '—')} · ${esc(chains)} · TVL ${compactMoney(row.tvl_usd)} · ${ageText(row.age_days)} listed${row.watchlist ? ' · ★ watchlist' : ''}`;
-  const compsRows = row.comps.map((c) => `<tr>
-    <td><b>${esc(c.slug)}</b></td>
-    <td>${esc(c.category || '—')}</td>
-    <td>${compactMoney(c.tvl_usd)}</td>
-    <td>${c.log_ratio.toFixed(4)}</td>
-  </tr>`).join('');
-  detailBody.innerHTML = `
-    <h2>#${row.rank} ${esc(row.name)}</h2>
-    <p class="sub">${sub}</p>
-    <div class="statgrid">
-      ${stat('Implied value', fullMoney(row.implied_value_usd))}
-      ${stat('TVL', compactMoney(row.tvl_usd))}
-      ${stat('Growth 7d', growthText(row.change_7d))}
-      ${stat('Age', ageText(row.age_days))}
-      ${stat('Growth multiplier', `×${row.growth_multiplier.toFixed(3)}`)}
-      ${stat('Maturity multiplier', `×${row.maturity_multiplier.toFixed(3)}`)}
-      ${stat('Chain multiplier', `×${row.chain_multiplier.toFixed(3)}`)}
-      ${stat('Median comp ratio', `10^${row.median_comp_ratio.toFixed(4)}`)}
-      ${stat('Rank range (P10–P90)', `${row.rank_lo} – ${row.rank_hi}`)}
-    </div>
-    <h3>Twelve nearest live comps</h3>
-    <p class="comps-note">${esc(row.comps_label)}</p>
-    <table>
-      <thead><tr><th>Comp</th><th>Category</th><th>TVL</th><th>Log ratio</th></tr></thead>
-      <tbody>${compsRows}</tbody>
-    </table>
-    <h3>Farm plan</h3>
-    <ol>${row.farm_steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
-  if (!dialog.open) dialog.showModal();
-  syncHash();
-}
-
-function closeDetail() {
-  if (dialog.open) dialog.close();
-  state.selected = null;
-  syncHash();
-}
-
-function setTab(tab) {
-  state.tab = tab;
-  $('tab-pretoken').setAttribute('aria-selected', String(tab === 'pretoken'));
-  $('tab-live').setAttribute('aria-selected', String(tab === 'live'));
-  renderBoard();
-  syncHash();
-}
-
-function syncHash() {
-  const params = new URLSearchParams();
-  if (state.tab === 'live') params.set('tab', 'live');
-  if (state.q) params.set('q', state.q);
-  if (state.category) params.set('category', state.category);
-  if (state.chain) params.set('chain', state.chain);
-  if (state.watchlistOnly) params.set('watchlist', '1');
-  if (state.selected) params.set('p', state.selected);
-  const hash = params.toString();
-  history.replaceState(null, '', hash ? `#${hash}` : '#');
-}
-
-function readHash() {
-  const params = new URLSearchParams(location.hash.slice(1));
-  if (params.get('tab') === 'live') state.tab = 'live';
-  if (params.get('q')) state.q = params.get('q');
-  if (params.get('category')) state.category = params.get('category');
-  if (params.get('chain')) state.chain = params.get('chain');
-  if (params.get('watchlist') === '1') state.watchlistOnly = true;
-  if (params.get('p')) state.selected = params.get('p');
-}
-
-function init() {
-  fillSelect($('category'), uniqueSorted(DATA.rows.map((r) => r.category)), 'All categories');
-  fillSelect($('chain'), uniqueSorted(DATA.rows.flatMap((r) => r.chains || [])), 'All chains');
-  readHash();
-  $('q').value = state.q;
-  $('category').value = state.category;
-  $('chain').value = state.chain;
-  $('watchlist-only').checked = state.watchlistOnly;
-  $('tab-pretoken').setAttribute('aria-selected', String(state.tab === 'pretoken'));
-  $('tab-live').setAttribute('aria-selected', String(state.tab === 'live'));
-  $('tab-pretoken').addEventListener('click', () => setTab('pretoken'));
-  $('tab-live').addEventListener('click', () => setTab('live'));
-  $('q').addEventListener('input', (e) => { state.q = e.target.value; renderBoard(); syncHash(); });
-  $('category').addEventListener('change', (e) => { state.category = e.target.value; renderBoard(); syncHash(); });
-  $('chain').addEventListener('change', (e) => { state.chain = e.target.value; renderBoard(); syncHash(); });
-  $('watchlist-only').addEventListener('change', (e) => { state.watchlistOnly = e.target.checked; renderBoard(); syncHash(); });
-  document.querySelectorAll('table.board thead th[data-sort]').forEach((th) => {
-    th.addEventListener('click', () => {
-      const key = th.getAttribute('data-sort');
-      if (state.sortKey === key) state.sortDir = -state.sortDir;
-      else { state.sortKey = key; state.sortDir = key === 'name' || key === 'category' ? 1 : -1; }
-      renderBoard();
-    });
+  // ---- Controls, hash routing, init ----
+  ["sort", "cat", "verdict", "watchlist", "q", "wi-deposit", "wi-share", "wi-tbill"].forEach((id) => {
+    $(id).addEventListener("change", render);
+    $(id).addEventListener("input", render);
   });
-  dialog.addEventListener('close', () => { state.selected = null; syncHash(); });
-  dialog.addEventListener('click', (e) => { if (e.target === dialog) closeDetail(); });
-  renderSpotlight();
-  renderLiveTable();
-  renderBoard();
-  if (state.selected) openDetail(state.selected);
-}
-
-init();
+  function applyHash() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    if (h.get("v")) { $("verdict").value = h.get("v"); }
+    if (h.get("c")) { $("cat").value = h.get("c"); }
+    render();
+    if (h.get("p")) openDetail(h.get("p"));
+  }
+  dlg.addEventListener("close", () => {
+    if (location.hash.indexOf("#p=") === 0) history.replaceState(null, "", location.pathname + location.search);
+  });
+  applyHash();
+})();

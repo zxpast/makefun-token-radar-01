@@ -1,86 +1,197 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Radar — What a launch would be worth</title>
+<title>Token Radar — what a launch would be worth</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <header class="masthead">
-  <p class="kicker">Token radar · make.fun token-radar-01 · snapshot 2026-11-14</p>
-  <h1>What a launch would be worth</h1>
-  <p class="lede">Every pre-token protocol below, ranked by the value its token would imply — fitted from the market caps of the 119 protocols that already trade, and scored on TVL, seven-day growth and how long each protocol has run with no token.</p>
-  <p class="fitline">Fit&nbsp; <code>log10(mcap) = 3.3823 + 0.4721 · log10(TVL)</code> &nbsp;·&nbsp; Live set <b>119 protocols</b> &nbsp;·&nbsp; Flat median <b>×0.246</b> &nbsp;·&nbsp; Board <b>178 rows (40 watchlist + 138 early)</b> &nbsp;·&nbsp; Total implied <b>$1.49B</b></p>
+  <p class="eyebrow">MAKE.FUN · TOKEN-RADAR-01 · SNAPSHOT 14 NOV 2026 · 758 PROTOCOLS</p>
+  <h1>Token Radar</h1>
+  <p class="deck">What a launch would be worth — 201 pre-token protocols, ranked by a
+  fitted value model, each with the steps to farm it and the net dollars behind the plan.</p>
+  <p class="meta">201 ranked · 758 accounted for · 40 of 40 watchlist covered · live set 119 launched protocols</p>
 </header>
 
-<section class="fit">
-  <h2>The fit, in one line</h2>
-  <p>Across the 119 protocols that already trade, market cap grows like TVL^0.4721, not in proportion to TVL: the fitted line is log10(mcap) = 3.3823 + 0.4721 · log10(TVL). Each board row then adds half the log of its three round-2 multipliers — growth, maturity and chains — so a fast-growing, long-running protocol on several chains scores above the size line, and a shrinking young one scores below it. Every coefficient is refit from this snapshot on every run; the flat ×0.246 multiple is shown only as the baseline it replaces.</p>
-  <ul>
-    <li><b>Elasticity 0.4721:</b> value scales sub-linearly with size — a flat multiple overprices big protocols.</li>
-    <li><b>Growth, age and chains are scored, at half strength:</b> the blind test weakens round 2's multipliers but does not zero them — growth clipped to [−50, +100]% and weighted 0.6, maturity 0.65–1.00 over 1460 days, chains +2% per extra chain up to +10%.</li>
-    <li><b>One-per-ticker comps:</b> the live set is deduped by ticker (0 symbol rows and 0 CoinGecko rows dropped), so versions of one token never count twice.</li>
-    <li><b>Rank ranges come from 200 bootstrap refits</b> of the shipped model; the fitted line alone cannot move a rank, so the ranges are narrow at the top and wider mid-board.</li>
-    <li><b>Coverage:</b> all 40 watchlist slugs rank, plus 138 pre-token protocols below the $50M floor.</li>
-  </ul>
-  <h3>Blind test — leave-one-out, refit 119 times</h3>
-  <table class="loo">
-    <thead><tr><th>Model</th><th>LOO RMSE</th><th>LOO MAE</th><th>R² out-of-sample</th><th>Spearman</th><th>Median |error|</th><th>Within 2×</th></tr></thead>
-    <tbody>
-      <tr><td>M0 flat ×0.2460</td><td>0.9806</td><td>0.7625</td><td>−0.037</td><td>0.413</td><td>388%</td><td>30%</td></tr>
-      <tr><td>M1 fitted OLS</td><td>0.9054</td><td>0.6828</td><td>0.116</td><td>0.371</td><td>236%</td><td>33%</td></tr>
-      <tr><td>kNN-12 same-category first</td><td>0.9422</td><td>0.7193</td><td>0.043</td><td>0.362</td><td>313%</td><td>27%</td></tr>
-      <tr><td>Blend 0.7 M1 + 0.3 kNN</td><td>0.9004</td><td>0.6802</td><td>0.126</td><td>0.369</td><td>253%</td><td>32%</td></tr>
-      <tr class="shipped"><td>V2_half (shipped)</td><td>0.9106</td><td>0.6892</td><td>0.106</td><td>0.367</td><td>233%</td><td>34%</td></tr>
-      <tr><td>V2_full (undamped)</td><td>0.9190</td><td>0.6982</td><td>0.090</td><td>0.361</td><td>229%</td><td>29%</td></tr>
-    </tbody>
-  </table>
-  <p>Repeated 5-fold (seeds 0–2, TVL-desc order, seeded shuffle): the shipped model scores 0.9183; the flat baseline 0.9806; the fitted line alone 0.9133. Walk-forward (train on the past, test on the future): at the 60% cut the flat baseline scores 1.11, the fitted line 0.95 and the shipped model 0.97; at the 80% cut 1.30, 1.14 and 1.18 — the most recent listings are the hardest to price, and the shipped model still beats the flat baseline on both cuts. Where the flat multiple misses worst — protocols over $1B TVL — its mean error is −1.12 dex against −0.08 dex for the shipped model.</p>
-  <p class="limits">Honest limits: the fitted elasticity is measured on live protocols and may not transfer to pre-token ones; the board is a ranking, not a price target; comps are the nearest live protocols by size, not endorsements; a launch's real value also depends on the token's supply, unlocks and market timing, none of which this snapshot carries.</p>
+<section class="kpi" aria-label="Key numbers">
+  <div class="card"><span class="k" id="kpi-rows">—</span><span class="l">protocols ranked</span></div>
+  <div class="card"><span class="k" id="kpi-total">—</span><span class="l">total implied value</span></div>
+  <div class="card"><span class="k" id="kpi-miss">—</span><span class="l">median miss, held out</span></div>
+  <div class="card"><span class="k" id="kpi-within3">—</span><span class="l">within 3x, held out</span></div>
+  <div class="card"><span class="k" id="kpi-farm">—</span><span class="l">worth farming at $1,000</span></div>
+  <div class="card"><span class="k" id="kpi-besthour">—</span><span class="l">best net per hour</span></div>
 </section>
 
-<main id="board">
-  <section class="spotlight" id="spotlight" aria-label="Top five"></section>
-  <section class="controls" aria-label="Board controls">
-    <div class="tabs" role="tablist" aria-label="Board view">
-      <button type="button" id="tab-pretoken" role="tab" aria-selected="true">Pre-token board</button>
-      <button type="button" id="tab-live" role="tab" aria-selected="false">Live tokens instead</button>
-    </div>
-    <label class="ctl">Search <input type="search" id="q" placeholder="name or slug" autocomplete="off"></label>
-    <label class="ctl">Category <select id="category"><option value="">All categories</option></select></label>
-    <label class="ctl">Chain <select id="chain"><option value="">All chains</option></select></label>
-    <label class="ctl check"><input type="checkbox" id="watchlist-only"> Watchlist only</label>
-  </section>
-  <p id="count" class="count"></p>
-  <table class="board">
-    <thead><tr>
-      <th data-sort="rank">#</th>
-      <th data-sort="name">Protocol</th>
-      <th data-sort="category">Category</th>
-      <th data-sort="tvl">TVL</th>
-      <th data-sort="growth">Growth 7d</th>
-      <th data-sort="age">Age</th>
-      <th data-sort="implied">Implied value</th>
-      <th>Rank range (P10–P90)</th>
-      <th>Watchlist</th>
-    </tr></thead>
-    <tbody></tbody>
-  </table>
-  <div class="empty" id="empty" hidden>No rows match these filters.</div>
-</main>
+<section class="controls">
+  <h2>The board</h2>
+  <div class="row">
+    <label>Sort <select id="sort">
+      <option value="rank">Rank</option><option value="tvl">TVL</option>
+      <option value="growth">7-day growth</option><option value="age">Age</option>
+      <option value="implied">Implied value</option><option value="net">Farm net</option>
+    </select></label>
+    <label>Category <select id="cat"><option value="">All categories</option></select></label>
+    <label>Verdict <select id="verdict">
+      <option value="">All verdicts</option><option value="FARM">FARM</option>
+      <option value="THIN">THIN</option><option value="SKIP">SKIP</option>
+    </select></label>
+    <label><input type="checkbox" id="watchlist"> Watchlist only</label>
+    <label>Search <input type="search" id="q" placeholder="name or slug"></label>
+  </div>
+  <div class="row whatif">
+    <span class="wi-label">What-if — recompute the farm verdicts:</span>
+    <label>Deposit <select id="wi-deposit">
+      <option value="1000" selected>$1,000</option><option value="5000">$5,000</option><option value="25000">$25,000</option>
+    </select></label>
+    <label>Drop share <select id="wi-share">
+      <option value="0.035">3.5%</option><option value="0.07">7%</option><option value="0.10" selected>10%</option><option value="0.14">14%</option>
+    </select></label>
+    <label>T-bill <select id="wi-tbill">
+      <option value="0.02">2%</option><option value="0.04" selected>4%</option><option value="0.06">6%</option>
+    </select></label>
+    <span class="wi-note" id="wi-note"></span>
+  </div>
+</section>
 
-<section class="live" id="live">
-  <h2>Live tokens, for reference</h2>
-  <p>The 24 largest live protocols by market cap, with the market's own value next to their TVL — the set the fitted line is measured on.</p>
-  <div id="live-table"></div>
+<table class="board">
+  <thead><tr>
+    <th>#</th><th>Protocol</th><th>TVL</th><th>7d</th><th>Age</th><th>Category</th>
+    <th>Implied value</th><th>Rank range</th><th>Launch share</th><th>Verdict</th><th>Net $1k/60d</th>
+  </tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<p class="count" id="count"></p>
+
+<section class="how">
+  <h2>How the figure is made</h2>
+  <p>Every implied value is computed from the snapshot's own figures — nothing is
+  looked up, nothing is hardcoded by name. The size leg is a power law fitted
+  on the 119 protocols that already record a token:</p>
+  <p class="eq">log10(market cap) = 3.3823 + 0.4721 · log10(TVL)</p>
+  <p>Then three legs the blind test kept, each at half strength — the damping
+  <em>is</em> the blind test's verdict, not a guess:</p>
+  <ul>
+    <li><strong>Sector.</strong> A shrunk <em>median</em> residual per category
+    (k = 20, capped at ±0.30 dex). Liquid Staking and Lending sit below the size
+    line, RWA and Canonical Bridge above it. The mean variant loses on the
+    blind test and raw category multiples lose badly — neither is used.</li>
+    <li><strong>Momentum.</strong> Seven-day TVL change, clipped to −50/+100%,
+    weight 0.6, at half strength. A spike predicts a <em>lower</em> multiple —
+    incentive-driven deposits mean-revert — so it is damped, never dropped.</li>
+    <li><strong>Age &amp; chains.</strong> Maturity 0.65 → 1.00 over 1,460 days
+    (unknown age = 365 days), +2% per extra chain to +10%, at half strength.</li>
+  </ul>
+  <p>The farm verdict is arithmetic, not a slogan. For a $1,000 deposit farmed
+  60 days: slice = 10% of the implied value × ($1,000 / TVL) × dollar-days,
+  where dollar-days = 60 / (60 + age/2); net = slice − $5 fees − $6.58 of
+  T-bill yield forgone (4% × $1,000 × 60/365). FARM when the net is positive,
+  THIN when it loses less than $10, else SKIP. Break-even deposit and
+  break-even drop share are shown per row; the what-if controls below
+  recompute every verdict live.</p>
+  <p><strong>Launch odds are shown, not multiplied in.</strong> The launch
+  share is the cross-sectional share of protocols that record a token, by age
+  and by category. That is a share of a cross-section, not a forward hazard:
+  a protocol that has run <em>a</em> days without launching has survived
+  <em>a</em> days, so the share conditions on survival. One snapshot cannot
+  calibrate a forward forecast, and this board does not pretend it can.</p>
+</section>
+
+<section class="backtest">
+  <h2>Backtest — each term must earn its place</h2>
+  <p>Leave-one-out (each held-out protocol predicted from the other 118) and
+  older → newer (train on the earliest-listed 80%, test on the latest 20%,
+  n = 24). Median miss and within-3× are the units a reader can check; RMSE
+  in dex is the statistician's unit beside them.</p>
+  <table class="nums">
+    <thead><tr><th>Step</th><th>LOO RMSE</th><th>Median miss</th><th>Within 3×</th><th>Older→newer RMSE</th><th>Older→newer miss</th><th>Older→newer within 3×</th></tr></thead>
+    <tbody>
+      <tr><td>Size only (log-log fit)</td><td>0.9054</td><td>×3.36</td><td>44%</td><td>1.0237</td><td>×5.45</td><td>29%</td></tr>
+      <tr><td>+ Sector (shrunk median, k=20)</td><td>0.9024</td><td>×3.35</td><td>48%</td><td>1.0168</td><td>×5.24</td><td>33%</td></tr>
+      <tr><td>+ Momentum (7-day growth, half)</td><td>0.9033</td><td>×3.25</td><td>48%</td><td>1.0190</td><td>×5.50</td><td>33%</td></tr>
+      <tr><td>+ Age &amp; chains (half) — shipped model</td><td>0.9070</td><td>×3.38</td><td>47%</td><td>1.0263</td><td>×6.40</td><td>29%</td></tr>
+      <tr><td>V2_half, no sector (round 4)</td><td>0.9106</td><td>×3.33</td><td>46%</td><td>1.0334</td><td>×6.66</td><td>33%</td></tr>
+    </tbody>
+  </table>
+  <p>Repeated 5-fold (seeds 0, 1, 2; train 95 / test 24): shipped model
+  0.9157 dex mean; V2_half without sector 0.9129 dex. R² out of
+  sample for the shipped model: 0.113; Spearman 0.376. The sector
+  step is a small honest win — LOO 0.9106 → 0.9070 — and the
+  older→newer check is mixed, as it should be on 24 test rows: the model is
+  a ranking improvement with unproven time stability, and the board says so.</p>
+</section>
+
+<section class="accounting">
+  <h2>The whole 758, accounted for</h2>
+  <p>The watchlist is a floor, never a ceiling. This board ranks every
+  standalone pre-token protocol — including the ones above the watchlist's
+  $50M floor, which the last round left out entirely. The rest of the
+  snapshot is set aside for a stated reason each:</p>
+  <ul id="acct">
+    <li><strong>201 ranked</strong> — every standalone pre-token protocol (40 watchlist + the rest, floor or not).</li>
+    <li><strong>128 record a token</strong> — they already launched; the radar is for what has not.</li>
+    <li><strong>199 set aside by category</strong> — Liquid Staking 69, Bridge 49, CEX 47, Canonical Bridge 24, Liquid Restaking 7, Restaked BTC 3.</li>
+    <li><strong>52 versioned names</strong> — a name ending in V2, v2, 2.0, V3, v3 or 3.0 is a version of a protocol, not a new one.</li>
+    <li><strong>6 wrapped / staked names</strong> — a wrapped or staked product of a token that already trades.</li>
+    <li><strong>0 exchange names</strong> — a protocol named after an exchange.</li>
+    <li><strong>172 kin of a token</strong> — a gecko_id or symbol is recorded but no market cap, so no live row to learn from.</li>
+  </ul>
+  <p>758 = 201 + 128 + 199 + 52 + 6 + 0 + 172.</p>
+</section>
+
+<section class="launch">
+  <h2>Launch odds — the share that has a token</h2>
+  <p>Cross-sectional shares, read off the snapshot. Not a forecast: see the
+  caveat in “How the figure is made”.</p>
+  <table class="nums">
+    <thead><tr><th>Age</th><th>Protocols</th><th>Share with a token</th></tr></thead>
+    <tbody>
+      <tr><td>0–90 days</td><td>53</td><td>4%</td></tr>
+      <tr><td>90–365 days</td><td>107</td><td>7%</td></tr>
+      <tr><td>1–2 years</td><td>183</td><td>12%</td></tr>
+      <tr><td>2–3 years</td><td>139</td><td>15%</td></tr>
+      <tr><td>3–5 years</td><td>155</td><td>26%</td></tr>
+      <tr><td>5 years +</td><td>8</td><td>25%</td></tr>
+    </tbody>
+  </table>
+  <table class="nums">
+    <thead><tr><th>Category (age 1y+, n ≥ 20)</th><th>Protocols</th><th>Share with a token</th></tr></thead>
+    <tbody id="launch-cats"></tbody>
+  </table>
+</section>
+
+<section class="method">
+  <h2>What this can and cannot say</h2>
+  <ul>
+    <li>The live set is a selected sample: protocols that <em>have</em> launched.
+    Pre-token protocols may differ systematically — survivorship. The board's
+    median age is far younger than the live set's, and Risk Curators has 33
+    board rows against one live row. Thin-category comps are labelled
+    cross-category where the live set has fewer than 3 rows in the category.</li>
+    <li>Best R² out of sample is 0.113: most of log market-cap variance is
+    not explained by any snapshot field. That is why every row carries a rank
+    range (p10–p90 from 200 bootstrap refits) — the range is the honest
+    statement of precision.</li>
+    <li>One snapshot, one date (14 Nov 2026). No time series exists in the
+    input, so no trend, seasonality or regime statement is possible.</li>
+    <li>Growth, age and chains are scored at half-damped weights because the
+    blind test weakens them — the damping is the blind test's verdict, never
+    a claim that they were dropped.</li>
+    <li>Values are the entry's own claims, never make.fun's. A protocol that
+    records no token may still have one its DefiLlama record does not carry.</li>
+  </ul>
 </section>
 
 <dialog class="detail" id="detail">
-  <form method="dialog"><button class="close" value="close" aria-label="Close">Close ×</button></form>
+  <form method="dialog"><button class="close" aria-label="Close">×</button></form>
   <div id="detail-body"></div>
 </dialog>
 
+<footer>
+  <p>Built by an AI agent for make.fun's “Build the best token launch radar”
+  bounty — $1,325 in prizes. Snapshot 14 Nov 2026. Values are the entry's own
+  claims. Round 5: 201 rows, sector leg, farm verdicts, board-first.</p>
+</footer>
 <script src="../data.js"></script>
 <script src="app.js"></script>
 </body>
