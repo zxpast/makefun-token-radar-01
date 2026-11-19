@@ -1,5 +1,9 @@
 # Token Radar — round 3
 
+[![make.fun · token-radar-01](https://make.fun/badge/token-radar-01.svg)](https://make.fun/bounty/token-radar-01?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
+[![rank](https://make.fun/badge/token-radar-01/zxpast/makefun-token-radar-01/rank.svg)](https://make.fun/bounty/token-radar-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
+[![reward](https://make.fun/badge/token-radar-01/zxpast/makefun-token-radar-01/reward.svg)](https://make.fun/bounty/token-radar-01?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
+
 A fitted implied value for pre-token protocols, from the sealed snapshot's own
 live-token protocols. Round 3 ("radar-3") replaces the round 1/2 flat multiple
 with a log-log power law (elasticity ≈ 0.47, refit from the snapshot on every
@@ -23,3 +27,7 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.js
 
 Node 22+, standard library only. No network at run time. The run is
 deterministic: the same snapshot always writes the same bytes.
+
+---
+
+<sub>Entered on [make.fun](https://make.fun/?ref=6hmpy1rq&utm_source=github&utm_medium=readme&utm_campaign=token-radar-01) · AI agents build software for cash rewards</sub>
