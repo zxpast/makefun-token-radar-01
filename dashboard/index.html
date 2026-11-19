@@ -3,14 +3,79 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Token Radar ranks pre-token protocols by implied value, from the snapshot's own TVL, growth, age and chain spread, with a farm plan for each row.">
-<title>Token Radar — pre-token protocols, ranked by implied value</title>
+<title>Token Radar — fitted implied value for pre-token protocols</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<noscript><p>Token Radar is a JavaScript page: it renders the board from the data file beside it.</p></noscript>
-<a class="jump" href="#board">Jump to the board</a>
-<main id="board"></main>
+<header class="masthead">
+  <p class="eyebrow">Token Radar · make.fun token-radar-01 · snapshot <span id="asof">—</span></p>
+  <h1>What a launch would be worth</h1>
+  <p class="standfirst">Every pre-token protocol below, ranked by the value its token would imply —
+    fitted from the market caps of the 119 protocols that already trade, not from a
+    flat multiple. The model is refit from the sealed snapshot on every run.</p>
+  <dl class="fitline" id="fitline"></dl>
+</header>
+<main>
+  <section class="panel" id="model" aria-label="How the value is fitted">
+    <h2>The fit, in one line</h2>
+    <p id="fittext"></p>
+    <ul class="keypoints" id="keypoints"></ul>
+  </section>
+  <section class="panel" id="controls" aria-label="Board controls">
+    <h2>The board</h2>
+    <div class="controls">
+      <label>Search <input id="q" type="search" placeholder="name or slug" autocomplete="off"></label>
+      <label>Category <select id="cat"><option value="">All categories</option></select></label>
+      <label class="check"><input id="watchonly" type="checkbox"> Watchlist only</label>
+      <label class="check"><input id="liveonly" type="checkbox"> Live tokens instead</label>
+    </div>
+    <p class="count" id="count"></p>
+    <div class="tablewrap"><table id="board"><thead><tr>
+      <th>#</th><th>Protocol</th><th>Category</th><th>TVL</th>
+      <th>Implied value</th><th>Rank range (p10–p90)</th><th>Watchlist</th>
+    </tr></thead><tbody></tbody></table></div>
+    <div class="tablewrap"><table id="livetable" hidden><thead><tr>
+      <th>#</th><th>Protocol</th><th>Category</th><th>TVL</th><th>Market cap</th><th>mcap / TVL</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+  <section class="panel" id="validation" aria-label="Blind-test validation">
+    <h2>Tested blind before it scores anything</h2>
+    <p class="note">Leave-one-out by brute-force refit: each held-out protocol is excluded from
+      every fitted quantity, including the kNN pool. Repeated 5-fold uses seeds 0, 1 and 2.
+      The flat baseline is the full-live-set median, exactly as radar-2 used it.</p>
+    <h3>Leave-one-out, 119 live protocols</h3>
+    <div class="tablewrap"><table id="loo"><thead><tr>
+      <th>Model</th><th>RMSE (dex)</th><th>MAE (dex)</th><th>R² out-of-sample</th>
+      <th>Spearman</th><th>Median error</th><th>Within 2×</th><th>5-fold RMSE</th>
+    </tr></thead><tbody></tbody></table></div>
+    <h3>Walk-forward: train on the earliest-listed, test on the later-listed</h3>
+    <div class="tablewrap"><table id="walk"><thead><tr>
+      <th>Cut</th><th>Train / test</th><th>Flat</th><th>Log-log</th><th>Blend</th>
+    </tr></thead><tbody></tbody></table></div>
+    <h3>Tried and dropped</h3>
+    <ul class="dropped" id="dropped"></ul>
+  </section>
+  <section class="panel" id="limits" aria-label="Honest limits">
+    <h2>What this cannot say</h2>
+    <ul>
+      <li>Best R² out-of-sample is about +0.13: roughly 87% of log market-cap variance is
+        not explained by any snapshot field. Implied values are order-of-magnitude
+        estimates; the product is the ranking plus its uncertainty band, not the dollar figure.</li>
+      <li>The live set is a selected sample: protocols that have launched. Pre-token
+        protocols may differ systematically, and no snapshot field corrects for that.</li>
+      <li>One snapshot, one date. No time series exists in the input, so no trend,
+        seasonality or regime statement is possible.</li>
+      <li>Growth, age and chain count are displayed as tested-and-dropped, not as scorers:
+        the blind test rules them out as value drivers on this snapshot.</li>
+    </ul>
+  </section>
+</main>
+<footer>
+  <p>Source: <span id="source">—</span> · Board and validation are a pure function of the
+    sealed snapshot; nothing about any protocol is hardcoded. Farm steps are generic
+    guidance, not financial advice.</p>
+</footer>
+<dialog class="detail" id="detail"></dialog>
 <script src="../data.js"></script>
 <script src="app.js"></script>
 </body>
